@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>دفتر الحساب</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#17493a">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{--bg:#f3f5f1;--card:#fff;--ink:#1b2a25;--mute:#6b7a73;--line:#dde3dc;--in:#1f7a4d;--out:#b5472f;--accent:#17493a;--on:#fff;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111a16;--card:#1a2620;--ink:#e8efe9;--mute:#93a39a;--line:#2b3a33;--in:#4fc58a;--out:#e8896f;--accent:#4fc58a;--on:#0f1a15}}
+:root[data-theme="dark"]{--bg:#111a16;--card:#1a2620;--ink:#e8efe9;--mute:#93a39a;--line:#2b3a33;--in:#4fc58a;--out:#e8896f;--accent:#4fc58a;--on:#0f1a15}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Cairo,Tahoma,sans-serif;max-width:560px;margin-inline:auto;padding:14px}
+h1{font-size:22px;margin:6px 0 12px;font-weight:800}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+label{font-size:13px;color:var(--mute);display:block;margin-bottom:4px}
+input{width:100%;font:inherit;font-size:18px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+input:focus-visible,button:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.btn{font:inherit;font-weight:800;font-size:17px;border:0;border-radius:10px;padding:13px;color:#fff;cursor:pointer}
+.bin{background:var(--in)}.bout{background:var(--out)}
+.sum{display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:6px 8px;align-items:center;font-size:14px}
+.sum .h{color:var(--mute);font-size:12px}
+.sum b{font-weight:800}.in{color:var(--in)}.out{color:var(--out)}
+.net{font-size:30px;font-weight:800;margin:2px 0 10px}
+.item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.x{background:none;border:0;color:var(--mute);font-size:20px;cursor:pointer;padding:4px 10px}
+.mute{color:var(--mute);font-size:14px}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:7px 4px;text-align:center;border-top:1px solid var(--line)}
+th{color:var(--mute);font-weight:600;border-top:0}.scroll{overflow-x:auto}
+</style>
+</head>
+<body>
+<h1>دفتر الحساب</h1>
+
+<div class="card">
+  <label for="d">التاريخ</label>
+  <input type="date" id="d">
+</div>
+
+<div class="card">
+  <div class="net" id="dayNet"></div>
+  <div class="sum" id="sum"></div>
+</div>
+
+<div class="card">
+  <label for="amt">المبلغ (ل.س)</label>
+  <input id="amt" inputmode="decimal" placeholder="0" autocomplete="off">
+  <div style="height:10px"></div>
+  <label for="note">ملاحظة (اختياري)</label>
+  <input id="note" placeholder="مثلاً: مواصلات، راتب، طعام" autocomplete="off">
+  <div style="height:12px"></div>
+  <div class="row">
+    <button class="btn bin" id="addIn">+ دخل</button>
+    <button class="btn bout" id="addOut">− مصروف</button>
+  </div>
+</div>
+
+<div class="card">
+  <div style="font-weight:800;margin-bottom:6px">حركات هذا اليوم</div>
+  <div id="list"></div>
+</div>
+
+<div class="card">
+  <div style="font-weight:800;margin-bottom:6px" id="yTitle"></div>
+  <div class="scroll"><table id="months"></table></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const MN=['كانون الثاني','شباط','آذار','نيسان','أيار','حزيران','تموز','آب','أيلول','تشرين الأول','تشرين الثاني','كانون الأول'];
+let data=[];
+try{data=JSON.parse(localStorage.getItem('masarefi')||'[]')}catch(e){data=[]}
+function save(){try{localStorage.setItem('masarefi',JSON.stringify(data))}catch(e){}}
+const fmt=n=>Math.round(n).toLocaleString('en-US');
+function today(){const t=new Date();return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0')}
+function num(s){
+  s=s.replace(/[٠-٩]/g,c=>'٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/[٫,،]/g,'.').replace(/\s/g,'');
+  const n=parseFloat(s);return isFinite(n)&&n>0?n:null;
+}
+function tot(f){let i=0,o=0;for(const e of data)if(f(e.date))e.type==='in'?i+=e.amount:o+=e.amount;return{i,o,n:i-o}}
+function render(){
+  const d=$('d').value||today(), ym=d.slice(0,7), y=d.slice(0,4);
+  const D=tot(x=>x===d), M=tot(x=>x.startsWith(ym)), Y=tot(x=>x.startsWith(y));
+  $('dayNet').innerHTML='صافي اليوم: <span class="'+(D.n<0?'out':'in')+'">'+fmt(D.n)+' ل.س</span>';
+  const row=(t,v)=>'<span>'+t+'</span><b class="in">'+fmt(v.i)+'</b><b class="out">'+fmt(v.o)+'</b><b class="'+(v.n<0?'out':'in')+'">'+fmt(v.n)+'</b>';
+  $('sum').innerHTML='<span></span><span class="h">دخل</span><span class="h">مصروف</span><span class="h">صافي</span>'+row('اليوم',D)+row('الشهر',M)+row('السنة',Y);
+  const L=data.filter(e=>e.date===d);
+  $('list').innerHTML=L.length?L.map(e=>'<div class="item"><div><b class="'+e.type+'">'+(e.type==='in'?'+ ':'− ')+fmt(e.amount)+'</b><div class="mute">'+(e.note||(e.type==='in'?'دخل':'مصروف'))+'</div></div><button class="x" aria-label="حذف" data-id="'+e.id+'">✕</button></div>').join(''):'<div class="mute">لا توجد حركات في هذا اليوم. أدخل مبلغاً بالأعلى.</div>';
+  $('yTitle').textContent='ملخص سنة '+y;
+  let h='<tr><th>الشهر</th><th>دخل</th><th>مصروف</th><th>صافي</th></tr>';
+  for(let m=0;m<12;m++){const p=y+'-'+String(m+1).padStart(2,'0');const t=tot(x=>x.startsWith(p));
+    h+='<tr><td>'+MN[m]+'</td><td class="in">'+fmt(t.i)+'</td><td class="out">'+fmt(t.o)+'</td><td class="'+(t.n<0?'out':'in')+'">'+fmt(t.n)+'</td></tr>';}
+  $('months').innerHTML=h;
+}
+function add(type){
+  const a=num($('amt').value);
+  if(!a){$('amt').focus();$('amt').style.borderColor='var(--out)';return}
+  $('amt').style.borderColor='';
+  data.push({id:Date.now()+''+Math.random().toString(36).slice(2,6),date:$('d').value||today(),type,amount:a,note:$('note').value.trim()});
+  save();$('amt').value='';$('note').value='';render();$('amt').focus();
+}
+$('addIn').onclick=()=>add('in');$('addOut').onclick=()=>add('out');
+$('d').onchange=render;
+$('list').onclick=e=>{const id=e.target.dataset&&e.target.dataset.id;if(id&&confirm('حذف هذه الحركة؟')){data=data.filter(x=>x.id!==id);save();render()}};
+$('d').value=today();render();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
